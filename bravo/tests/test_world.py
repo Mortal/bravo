@@ -1,11 +1,13 @@
+from twisted.trial import unittest
+
 import numpy
 import shutil
 import tempfile
-import unittest
 
 from itertools import product
 
 import bravo.config
+import bravo.errors
 import bravo.world
 
 class TestWorldChunks(unittest.TestCase):
@@ -120,3 +122,42 @@ class TestWorldChunks(unittest.TestCase):
             # need to be adjusted.
             self.assertEqual(chunk.get_metadata((x, y, z)),
                 self.w.get_metadata((x, y, z)))
+
+class TestWorldInit(unittest.TestCase):
+
+    def setUp(self):
+        self.name = "unittest"
+        self.d = tempfile.mkdtemp()
+
+        bravo.config.configuration.add_section("world unittest")
+        bravo.config.configuration.set("world unittest", "url", "file://%s" % self.d)
+        bravo.config.configuration.set("world unittest", "serializer",
+            "alpha")
+
+    def tearDown(self):
+        shutil.rmtree(self.d)
+        bravo.config.configuration.remove_section("world unittest")
+
+    def test_trivial(self):
+        pass
+
+    def test_serializer_exception(self):
+        self.patch(bravo.plugins.serializers.Alpha, "load_level",
+                   lambda self, too, many, args: None)
+
+        self.assertRaises(RuntimeError, bravo.world.World, self.name)
+
+        # There's an error in the log from deep in plugin.verify_plugin(), so
+        # toss it out.
+        self.flushLoggedErrors()
+
+    def test_load_level_exception(self):
+        def raiser(self, level):
+            raise bravo.errors.SerializerReadException("testing")
+        self.patch(bravo.plugins.serializers.Alpha, "load_level", raiser)
+
+        w = bravo.world.World(self.name)
+
+        if w.chunk_management_loop.running:
+            w.chunk_management_loop.stop()
+        del w

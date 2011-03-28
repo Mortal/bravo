@@ -1,4 +1,6 @@
-import unittest
+from twisted.trial import unittest
+
+import zope.interface
 
 import bravo.plugin
 
@@ -102,3 +104,77 @@ class TestOptions(unittest.TestCase):
         names = ["-first", "*"]
         d = {"first": None, "second": None}
         self.assertEqual(["second"], bravo.plugin.expand_names(d, names))
+
+class ITestInterface(zope.interface.Interface):
+
+    name = zope.interface.Attribute("")
+    attr = zope.interface.Attribute("")
+    def meth(arg):
+        pass
+
+class TestVerifyPlugin(unittest.TestCase):
+
+    def test_no_name(self):
+        class NoName(object):
+            zope.interface.implements(ITestInterface)
+
+        self.assertRaises(bravo.plugin.PluginException,
+                          bravo.plugin.verify_plugin,
+                          ITestInterface,
+                          NoName())
+
+    def test_no_attribute(self):
+        class NoAttr(object):
+            zope.interface.implements(ITestInterface)
+
+            name = "test"
+
+        self.assertRaises(bravo.plugin.PluginException,
+                          bravo.plugin.verify_plugin,
+                          ITestInterface,
+                          NoAttr())
+
+    def test_no_method(self):
+        class NoMeth(object):
+            zope.interface.implements(ITestInterface)
+
+            name = "test"
+            attr = "unit"
+
+        self.assertRaises(bravo.plugin.PluginException,
+                          bravo.plugin.verify_plugin,
+                          ITestInterface,
+                          NoMeth())
+
+    def test_broken_method(self):
+        class BrokenMeth(object):
+            zope.interface.implements(ITestInterface)
+
+            name = "test"
+            attr = "unit"
+
+            def meth(self, arg, extra):
+                pass
+
+        self.assertRaises(bravo.plugin.PluginException,
+                          bravo.plugin.verify_plugin,
+                          ITestInterface,
+                          BrokenMeth())
+
+        # BMI (and only BMI!) writes an error to the log, so let's flush it
+        # out and pass the test.
+        self.flushLoggedErrors()
+
+    def test_success(self):
+        class Valid(object):
+            zope.interface.implements(ITestInterface)
+
+            name = "test"
+            attr = "unit"
+
+            def meth(self, arg):
+                pass
+
+        valid = Valid()
+        self.assertEqual(bravo.plugin.verify_plugin(ITestInterface, valid),
+                         valid)

@@ -14,6 +14,7 @@ from twisted.python.filepath import FilePath
 from zope.interface import implements, classProvides
 
 from bravo.entity import entities, tiles
+from bravo.errors import SerializerReadException, SerializerWriteException
 from bravo.ibravo import ISerializer, ISerializerFactory
 from bravo.location import Location
 from bravo.nbt import NBTFile
@@ -392,6 +393,7 @@ class Alpha(object):
         tag["Data"]["SpawnX"] = TAG_Int(level.spawn[0])
         tag["Data"]["SpawnY"] = TAG_Int(level.spawn[1])
         tag["Data"]["SpawnZ"] = TAG_Int(level.spawn[2])
+        tag["Data"]["Time"] = TAG_Long(level.time)
 
         return tag
 
@@ -408,10 +410,16 @@ class Alpha(object):
         if not tag:
             return
 
-        self._load_chunk_from_tag(chunk, tag)
+        try:
+            self._load_chunk_from_tag(chunk, tag)
+        except Exception, e:
+            raise SerializerReadException(e)
 
     def save_chunk(self, chunk):
-        tag = self._save_chunk_to_tag(chunk)
+        try:
+            tag = self._save_chunk_to_tag(chunk)
+        except Exception, e:
+            raise SerializerWriteException(e)
 
         first, second, filename = names_for_chunk(chunk.x, chunk.z)
         fp = self.folder.child(first).child(second)
@@ -426,11 +434,16 @@ class Alpha(object):
         if not tag:
             return
 
-        level.spawn = (tag["Data"]["SpawnX"].value,
-            tag["Data"]["SpawnY"].value,
-            tag["Data"]["SpawnZ"].value)
+        try:
+            level.spawn = (tag["Data"]["SpawnX"].value,
+                tag["Data"]["SpawnY"].value,
+                tag["Data"]["SpawnZ"].value)
 
-        level.seed = tag["Data"]["RandomSeed"].value
+            level.seed = tag["Data"]["RandomSeed"].value
+            level.time = tag["Data"]["Time"].value
+        except KeyError:
+            # Just raise. It's probably gonna be caught and ignored anyway.
+            raise SerializerReadException("Incomplete level data")
 
     def save_level(self, level):
         tag = self._save_level_to_tag(level)
