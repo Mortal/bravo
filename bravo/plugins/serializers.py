@@ -357,8 +357,12 @@ class Alpha(object):
 
         for item in tag.tags:
             slot = item["Slot"].value
-            items[slot] = (item["id"].value,
-                item["Damage"].value, item["Count"].value)
+            try:
+                items[slot] = (item["id"].value,
+                    item["Damage"].value, item["Count"].value)
+            except IndexError:
+                print "Cannot put item in slot %d: id %d damage %d count %d" % (slot,
+                    item["id"].value, item["Damage"].value, item["Count"].value)
 
         inventory.load_from_list(items)
 
